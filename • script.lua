@@ -108,10 +108,11 @@ Instance.new("UICorner", MinBtn).CornerRadius = UDim.new(1, 0)
 
 local Ball = Instance.new("TextButton", ScreenGui) 
 Ball.Size = UDim2.new(0, 50, 0, 50) 
-Ball.Position = Frame.Position 
+-- 修改：將初始位置調整到大面板的左側（左外拉 60 像素）
+Ball.Position = UDim2.new(0.5, -dw/2 - 60, 0.5, -25) 
 Ball.BackgroundColor3 = C.bg2 
 Ball.BorderSizePixel = 0 
-Ball.Visible = false 
+Ball.Visible = true 
 Ball.Text = "" 
 Ball.AutoButtonColor = false 
 Ball.ZIndex = 999 
@@ -294,9 +295,8 @@ end)
 makeSlider("瞄準範圍", 150, 0, 1000, 3, function(v) 
     FovRadius = v 
 end) 
-
-makeBtn("[ ESP方框 ] OFF", C.red, 4, function(b, l) 
-    EspBoxEnabled = not EspBoxEnabled 
+makeBtn("[ ESP方框 ] OFF", C.red, 4, function(b, l)
+EspBoxEnabled = not EspBoxEnabled
 l.Text = "[ ESP方框 ] " .. (EspBoxEnabled and "ON" or "OFF")
 local cor = EspBoxEnabled and C.greenD or C.red
 tw(b, {BackgroundColor3 = cor}, 0.3)
@@ -368,18 +368,11 @@ end)
 local minimized = false
 local function minimize()
 minimized = true
-local fp = Frame.Position
 Frame.Visible = false
-Ball.Position = fp
-Ball.Size = UDim2.new(0, 50, 0, 50)
-Ball.Visible = true
 MinBtn.Text = "X"
 end
 local function restore()
 minimized = false
-local bp = Ball.Position
-Ball.Visible = false
-Frame.Position = bp
 Frame.Visible = true
 MinBtn.Text = "X"
 end
@@ -387,7 +380,11 @@ MinBtn.MouseButton1Click:Connect(function()
 if not minimized then minimize() else restore() end
 end)
 Ball.MouseButton1Click:Connect(function()
-if minimized then restore() end
+if not minimized then
+minimize()
+else
+restore()
+end
 end)
 local FovGui = Instance.new("ScreenGui")
 FovGui.Name = "FovCircleGUI"
