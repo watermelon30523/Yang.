@@ -1,4 +1,4 @@
-```lualocal Players = game:GetService("Players") 
+local Players = game:GetService("Players") 
 local RunService = game:GetService("RunService") 
 local UserInputService = game:GetService("UserInputService") 
 local TweenService = game:GetService("TweenService") 
@@ -531,4 +531,4 @@ if target then
 Camera.CFrame = CFrame.new(Camera.CFrame.Position, target.Position)
 end
 end)
-```
+
