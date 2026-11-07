@@ -108,7 +108,6 @@ Instance.new("UICorner", MinBtn).CornerRadius = UDim.new(1, 0)
 
 local Ball = Instance.new("TextButton", ScreenGui) 
 Ball.Size = UDim2.new(0, 50, 0, 50) 
--- 修改：將初始位置調整到大面板的左側（左外拉 60 像素）
 Ball.Position = UDim2.new(0.5, -dw/2 - 60, 0.5, -25) 
 Ball.BackgroundColor3 = C.bg2 
 Ball.BorderSizePixel = 0 
@@ -295,7 +294,8 @@ end)
 makeSlider("瞄準範圍", 150, 0, 1000, 3, function(v) 
     FovRadius = v 
 end) 
-makeBtn("[ ESP方框 ] OFF", C.red, 4, function(b, l)
+
+makeBtn("[ ESP方框 ] OFF", C.red, 4, function(b, l) 
 EspBoxEnabled = not EspBoxEnabled
 l.Text = "[ ESP方框 ] " .. (EspBoxEnabled and "ON" or "OFF")
 local cor = EspBoxEnabled and C.greenD or C.red
@@ -406,6 +406,23 @@ FovStroke.Color = C.green
 FovStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
 local FovCorner = Instance.new("UICorner", FovFrame)
 FovCorner.CornerRadius = UDim.new(1, 0)
+-- 【新增：核心雙重團隊檢查函式】
+local function isTeammate(targetPlayer)
+if not targetPlayer then return false end
+-- 1. 檢查普通遊戲的官方內建隊伍機制
+if LocalPlayer.Team and targetPlayer.Team and LocalPlayer.Team == targetPlayer.Team then
+return true
+end
+-- 2. 專門針對兵工廠（Arsenal）的自定義 Character 隊伍屬性檢查
+if LocalPlayer.Character and targetPlayer.Character then
+local myArsenalTeam = LocalPlayer.Character:FindFirstChild("Team")
+local enemyArsenalTeam = targetPlayer.Character:FindFirstChild("Team")
+if myArsenalTeam and enemyArsenalTeam and myArsenalTeam.Value == enemyArsenalTeam.Value then
+return true
+end
+end
+return false
+end
 local function createEsp(plr)
 if plr == LocalPlayer then return end
 local box = Drawing.new("Square")
@@ -449,7 +466,8 @@ if not obj.box or not obj.line then continue end
 local char = plr.Character
 local hum = char and char:FindFirstChildOfClass("Humanoid")
 local espPart = getEspPart(char)
-if espPart and hum and hum.Health > 0 then
+-- 修改：ESP 同步加入隊友過濾，如果是隊友就不顯示 ESP 方框與線
+if espPart and hum and hum.Health > 0 and not isTeammate(plr) then
 local pos, onScreen = Camera:WorldToViewportPoint(espPart.Position)
 if onScreen then
 if EspBoxEnabled then
@@ -497,7 +515,8 @@ local function getBestTarget()
 local best, bestDot = nil, -1
 local screenCenter = Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2)
 for _, plr in pairs(Players:GetPlayers()) do
-if plr ~= LocalPlayer and plr.Character then
+-- 修改：加入 not isTeammate(plr) 判斷，防止自動瞄準鎖定到隊友
+if plr ~= LocalPlayer and plr.Character and not isTeammate(plr) then
 local part = plr.Character:FindFirstChild(AimPart) or plr.Character:FindFirstChild("Head")
 if part and isAlive(plr.Character) then
 local dist = (part.Position - Camera.CFrame.Position).Magnitude
