@@ -14,6 +14,7 @@ local FovRadius = 150
 
 local EspBoxEnabled = false   
 local EspLineEnabled = false  
+local EspNameEnabled = false  -- 新增：名字開關變數
 local EspObjects = {} 
 
 local C = { 
@@ -38,7 +39,7 @@ end
 
 local isMobile = UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled 
 local dw = isMobile and 220 or 190 
-local dh = isMobile and 310 or 280 
+local dh = isMobile and 350 or 310 -- 微調：因為多了一行按鈕，稍微把面板長度拉高，避免元件擠壓
 
 local ScreenGui = Instance.new("ScreenGui") 
 ScreenGui.Name = "AimbotGUI" 
@@ -294,8 +295,7 @@ end)
 makeSlider("瞄準範圍", 150, 0, 1000, 3, function(v) 
     FovRadius = v 
 end) 
-
-makeBtn("[ ESP方框 ] OFF", C.red, 4, function(b, l) 
+makeBtn("[ ESP方框 ] OFF", C.red, 4, function(b, l)
 EspBoxEnabled = not EspBoxEnabled
 l.Text = "[ ESP方框 ] " .. (EspBoxEnabled and "ON" or "OFF")
 local cor = EspBoxEnabled and C.greenD or C.red
@@ -311,6 +311,16 @@ local cor = EspLineEnabled and C.greenD or C.red
 tw(b, {BackgroundColor3 = cor}, 0.3)
 for _, obj in pairs(EspObjects) do
 if obj.line then obj.line.Visible = EspLineEnabled end
+end
+end)
+-- 【新增：獨立的 ESP 名字按鈕，排在 LayoutOrder 6】
+makeBtn("[ ESP名字 ] OFF", C.red, 6, function(b, l)
+EspNameEnabled = not EspNameEnabled
+l.Text = "[ ESP名字 ] " .. (EspNameEnabled and "ON" or "OFF")
+local cor = EspNameEnabled and C.greenD or C.red
+tw(b, {BackgroundColor3 = cor}, 0.3)
+for _, obj in pairs(EspObjects) do
+if obj.name then obj.name.Visible = EspNameEnabled end
 end
 end)
 local Credit = Instance.new("TextLabel", Frame)
@@ -406,14 +416,13 @@ FovStroke.Color = C.green
 FovStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
 local FovCorner = Instance.new("UICorner", FovFrame)
 FovCorner.CornerRadius = UDim.new(1, 0)
--- 【新增：核心雙重團隊檢查函式】
 local function isTeammate(targetPlayer)
 if not targetPlayer then return false end
--- 1. 檢查普通遊戲的官方內建隊伍機制
 if LocalPlayer.Team and targetPlayer.Team and LocalPlayer.Team == targetPlayer.Team then
+if LocalPlayer.Team.Name ~= "" then
 return true
 end
--- 2. 專門針對兵工廠（Arsenal）的自定義 Character 隊伍屬性檢查
+end
 if LocalPlayer.Character and targetPlayer.Character then
 local myArsenalTeam = LocalPlayer.Character:FindFirstChild("Team")
 local enemyArsenalTeam = targetPlayer.Character:FindFirstChild("Team")
@@ -432,13 +441,22 @@ box.Visible = false
 local line = Drawing.new("Line")
 line.Thickness = 1.5
 line.Visible = false
-EspObjects[plr] = {box = box, line = line}
+local nameText = Drawing.new("Text")
+nameText.Text = plr.Name
+nameText.Size = 14
+nameText.Center = true
+nameText.Outline = true
+nameText.OutlineColor = Color3.new(0, 0, 0)
+nameText.Color = C.green
+nameText.Visible = false
+EspObjects[plr] = {box = box, line = line, name = nameText}
 end
 Players.PlayerAdded:Connect(createEsp)
 Players.PlayerRemoving:Connect(function(plr)
 if EspObjects[plr] then
 if EspObjects[plr].box then EspObjects[plr].box:Remove() end
 if EspObjects[plr].line then EspObjects[plr].line:Remove() end
+if EspObjects[plr].name then EspObjects[plr].name:Remove() end
 EspObjects[plr] = nil
 end
 end)
@@ -462,23 +480,41 @@ else
 FovFrame.Visible = false
 end
 for plr, obj in pairs(EspObjects) do
-if not obj.box or not obj.line then continue end
+if not obj.box or not obj.line or not obj.name then continue end
 local char = plr.Character
 local hum = char and char:FindFirstChildOfClass("Humanoid")
 local espPart = getEspPart(char)
--- 修改：ESP 同步加入隊友過濾，如果是隊友就不顯示 ESP 方框與線
 if espPart and hum and hum.Health > 0 and not isTeammate(plr) then
 local pos, onScreen = Camera:WorldToViewportPoint(espPart.Position)
 if onScreen then
+local currentBoxSizeX, currentBoxSizeY = 10, 10
+local currentBoxPosX, currentBoxPosY = pos.X - 5, pos.Y - 5
+if AimPart == "HumanoidRootPart" then
+local topPos = Camera:WorldToViewportPoint(espPart.Position + Vector3.new(0, 3, 0))
+local bottomPos = Camera:WorldToViewportPoint(espPart.Position - Vector3.new(0, 3.5, 0))
+currentBoxSizeY = math.abs(topPos.Y - bottomPos.Y)
+currentBoxSizeX = currentBoxSizeY / 1.5
+currentBoxPosX = pos.X - currentBoxSizeX / 2
+currentBoxPosY = pos.Y - currentBoxSizeY / 2
+end
+-- 獨立控制：方框開關
 if EspBoxEnabled then
-local boxSize = 10
-obj.box.Size = Vector2.new(boxSize, boxSize)
-obj.box.Position = Vector2.new(pos.X - boxSize/2, pos.Y - boxSize/2)
+obj.box.Size = Vector2.new(currentBoxSizeX, currentBoxSizeY)
+obj.box.Position = Vector2.new(currentBoxPosX, currentBoxPosY)
 obj.box.Color = C.green
 obj.box.Visible = true
 else
 obj.box.Visible = false
 end
+-- 獨立控制：名字開關
+if EspNameEnabled then
+obj.name.Position = Vector2.new(pos.X, currentBoxPosY - 15)
+obj.name.Color = C.green
+obj.name.Visible = true
+else
+obj.name.Visible = false
+end
+-- 獨立控制：連線開關
 if EspLineEnabled then
 obj.line.From = Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y)
 obj.line.To = Vector2.new(pos.X, pos.Y)
@@ -490,10 +526,12 @@ end
 else
 obj.box.Visible = false
 obj.line.Visible = false
+obj.name.Visible = false
 end
 else
 obj.box.Visible = false
 obj.line.Visible = false
+obj.name.Visible = false
 end
 end
 end)
@@ -515,7 +553,6 @@ local function getBestTarget()
 local best, bestDot = nil, -1
 local screenCenter = Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2)
 for _, plr in pairs(Players:GetPlayers()) do
--- 修改：加入 not isTeammate(plr) 判斷，防止自動瞄準鎖定到隊友
 if plr ~= LocalPlayer and plr.Character and not isTeammate(plr) then
 local part = plr.Character:FindFirstChild(AimPart) or plr.Character:FindFirstChild("Head")
 if part and isAlive(plr.Character) then
