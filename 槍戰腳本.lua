@@ -584,3 +584,12 @@ if target then
 Camera.CFrame = CFrame.new(Camera.CFrame.Position, target.Position)
 end
 end)
+task.spawn(function()
+pcall(function()
+game:GetService("StarterGui"):SetCore("SendNotification", {
+Title = "腳本載入成功🟢",
+Text = "", -- 副標題
+Duration = 4
+})
+end)
+end)
