@@ -540,3 +540,12 @@ end)
 local minimized = false
 MinBtn.MouseButton1Click:Connect(function() minimized = not minimized; Frame.Visible = not minimized end)
 Ball.MouseButton1Click:Connect(function() minimized = not minimized; Frame.Visible = not minimized end)
+task.spawn(function()
+pcall(function()
+game:GetService("StarterGui"):SetCore("SendNotification", {
+Title = "腳本載入成功🟢",
+Text = "",
+Duration = 4
+})
+end)
+end)
