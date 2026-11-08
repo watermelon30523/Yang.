@@ -14,17 +14,17 @@ local Config = {
     AutoAttack = false,
     TargetMode = "NPC",
     AimlockEnabled = false,
+    StopKey = Enum.KeyCode.G, 
 }
 
 local MaxDistance = 1500      
-local AttackDistance = 2.5    
+local AttackDistance = 2.5 
+local AimPart = "Head"
 local AimlockTargetChar = nil 
 local IsLockingCamera = false 
 local CurrentClosestTarget = nil 
-local CurrentStickTarget = nil 
-
-local LostTargetTime = 0
-local TargetGracePeriod = 2.5 
+local CurrentStickTarget = nil
+local IsBindingKey = false 
 
 local npcCache = setmetatable({}, { __mode = "k" })
 local function registerNPC(model)
@@ -77,7 +77,7 @@ local function getStickTarget()
                 local worldDist = (hrp.Position - myRoot.Position).Magnitude
                 if worldDist <= MaxDistance then
                     local yHeightDiff = math.abs(hrp.Position.Y - myRoot.Position.Y)
-                    if yHeightDiff < 35 then
+                    if yHeightDiff < 45 then 
                         local isPlayer = Players:GetPlayerFromCharacter(obj) ~= nil
                         if (Config.TargetMode == "Player" and isPlayer) or (Config.TargetMode == "NPC" and not isPlayer and npcCache[obj]) then
                             if worldDist < shortestDistance then 
@@ -112,20 +112,20 @@ local function getFrontClosestTarget()
         if obj:IsA("Model") and obj ~= myChar then
             local hum = obj:FindFirstChildOfClass("Humanoid")
             local hrp = obj:FindFirstChild("HumanoidRootPart") or obj:FindFirstChild("Torso")
+            
             if hum and hrp and hum.Health > 0 and not isInsideLobby(hrp) then
-                local offset = hrp.Position - camPos
-                local dist = offset.Magnitude
-                if dist <= MaxDistance then
-                    local yHeightDiff = hrp.Position.Y - myRoot.Position.Y
-                    if yHeightDiff > -14 then
+                local isPlayer = Players:GetPlayerFromCharacter(obj) ~= nil
+                
+                if (Config.TargetMode == "Player" and isPlayer) or (Config.TargetMode == "NPC" and not isPlayer) then
+                    local offset = hrp.Position - camPos
+                    local dist = offset.Magnitude
+                    
+                    if dist <= MaxDistance then
                         local dot = camLook:Dot(offset.Unit)
                         if dot > 0.4 then 
-                            local isPlayer = Players:GetPlayerFromCharacter(obj) ~= nil
-                            if (Config.TargetMode == "Player" and isPlayer) or (Config.TargetMode == "NPC" and not isPlayer and npcCache[obj]) then
-                                if dist < shortestDistance then 
-                                    shortestDistance = dist
-                                    bestTarget = obj
-                                end
+                            if dist < shortestDistance then 
+                                shortestDistance = dist
+                                bestTarget = obj
                             end
                         end
                     end
@@ -136,32 +136,34 @@ local function getFrontClosestTarget()
     return bestTarget
 end
 
+local aimlockFloatBtn
 task.spawn(function()
     while true do
-        task.wait(0.03)
-        CurrentClosestTarget = getFrontClosestTarget()
-        
+        task.wait(0.01)
         if IsLockingCamera and AimlockTargetChar then
+            local shouldUnlock = false
             if not AimlockTargetChar.Parent then
-                IsLockingCamera = false
-                AimlockTargetChar = nil
-                aimlockFloatBtn.Text = "未鎖定"
-                continue
+                shouldUnlock = true
+            else
+                local hum = AimlockTargetChar:FindFirstChildOfClass("Humanoid")
+                local hrp = AimlockTargetChar:FindFirstChild("HumanoidRootPart") or AimlockTargetChar:FindFirstChild("Torso")
+                if (hum and hum.Health <= 0) or (not hum) or (not hrp) then
+                    shouldUnlock = true
+                end
             end
-            local hum = AimlockTargetChar:FindFirstChildOfClass("Humanoid")
-            if hum and hum.Health <= 0 then
+            if shouldUnlock then
                 IsLockingCamera = false
                 AimlockTargetChar = nil
-                aimlockFloatBtn.Text = "未鎖定"
+                if aimlockFloatBtn then aimlockFloatBtn.Text = "未鎖定" end
             end
         end
     end
 end)
 
 LocalPlayer.CharacterAdded:Connect(function(char)
-    CurrentStickTarget = nil
     AimlockTargetChar = nil
     IsLockingCamera = false
+    CurrentStickTarget = nil
 end)
 
 local C = { 
@@ -185,7 +187,7 @@ end
 
 local isMobile = UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled 
 local dw = isMobile and 260 or 230 
-local dh = isMobile and 285 or 255 
+local dh = isMobile and 315 or 285 
 
 local ScreenGui = Instance.new("ScreenGui") 
 ScreenGui.Name = "SolaraInternalGUI" 
@@ -230,8 +232,7 @@ Title.TextColor3 = C.green
 Title.TextXAlignment = Enum.TextXAlignment.Left 
 
 task.spawn(function() 
-    while true do 
-        task.wait(0.15) 
+    while task.wait(0.15) do 
         local str = "" 
         for i = 1, 12 do str = str .. math.random(0, 1) end 
         Title.Text = "> " .. str 
@@ -266,7 +267,6 @@ local BallStroke = Instance.new("UIStroke", Ball)
 BallStroke.Thickness = 1.5 
 BallStroke.Color = C.green 
 BallStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border 
-
 local BallLabel = Instance.new("TextLabel", Ball)
 BallLabel.Size = UDim2.new(1, 0, 1, 0)
 BallLabel.BackgroundTransparency = 1
@@ -311,64 +311,69 @@ l.TextXAlignment = Enum.TextXAlignment.Center
 b.MouseButton1Click:Connect(function() if fn then fn(b, l) end end)
 return b, l
 end
-makeBtn("[ 自動貼人 ] OFF", C.bg3, 1, function(b, l)
+makeBtn("[ 自動瞄準 ] OFF", C.bg3, 1, function(b, l)
+Config.AimlockEnabled = not Config.AimlockEnabled
+l.Text = "[ 自動瞄準 ] " .. (Config.AimlockEnabled and "ON" or "OFF")
+local cor = Config.AimlockEnabled and C.greenD or C.bg3
+tw(b, {BackgroundColor3 = cor}, 0.25)
+if aimlockFloatBtn then
+aimlockFloatBtn.Visible = Config.AimlockEnabled
+if not Config.AimlockEnabled then
+IsLockingCamera = false
+AimlockTargetChar = nil
+aimlockFloatBtn.Text = "未鎖定"
+end
+end
+end)
+makeBtn("[ 自動貼人 ] OFF", C.bg3, 2, function(b, l)
 Config.AutoStick = not Config.AutoStick
 l.Text = "[ 自動貼人 ] " .. (Config.AutoStick and "ON" or "OFF")
 local cor = Config.AutoStick and C.greenD or C.bg3
 tw(b, {BackgroundColor3 = cor}, 0.25)
 if not Config.AutoStick then CurrentStickTarget = nil end
 end)
-makeBtn("[ 自動普攻 ] OFF", C.bg3, 2, function(b, l)
+makeBtn("[ 鎖定對象 ] NPC", C.greenD2, 3, function(b, l)
+Config.TargetMode = (Config.TargetMode == "NPC") and "Player" or "NPC"
+l.Text = "[ 鎖定對象 ] " .. (Config.TargetMode == "NPC" and "NPC" or "玩家")
+AimlockTargetChar = nil; IsLockingCamera = false; CurrentClosestTarget = nil; CurrentStickTarget = nil
+if aimlockFloatBtn then aimlockFloatBtn.Text = "未鎖定" end
+end)
+local autoAttackBtn, autoAttackLabel
+autoAttackBtn, autoAttackLabel = makeBtn("[ 自動普攻 ] OFF", C.bg3, 4, function(b, l)
 Config.AutoAttack = not Config.AutoAttack
 l.Text = "[ 自動普攻 ] " .. (Config.AutoAttack and "ON" or "OFF")
 local cor = Config.AutoAttack and C.greenD or C.bg3
 tw(b, {BackgroundColor3 = cor}, 0.25)
 end)
-local aimlockFloatBtn = Instance.new("TextButton", ScreenGui)
-aimlockFloatBtn.Size = UDim2.new(0, 56, 0, 56)
-aimlockFloatBtn.Position = UDim2.new(0.85, 0, 0.5, -28)
-aimlockFloatBtn.BackgroundColor3 = Color3.fromRGB(28, 35, 45)
-aimlockFloatBtn.BackgroundTransparency = 0.1
-aimlockFloatBtn.BorderSizePixel = 0
-aimlockFloatBtn.Text = "未鎖定"
-aimlockFloatBtn.Font = Enum.Font.SourceSansBold
-aimlockFloatBtn.TextSize = 14
-aimlockFloatBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-aimlockFloatBtn.TextWrapped = true
-aimlockFloatBtn.Visible = false
-local aimlockFloatStroke = Instance.new("UIStroke", aimlockFloatBtn)
-aimlockFloatStroke.Thickness = 2.0
-aimlockFloatStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-local logoGrad = Instance.new("UIGradient", aimlockFloatStroke)
-logoGrad.Color = ColorSequence.new({
-ColorSequenceKeypoint.new(0, C.purpleBorder),
-ColorSequenceKeypoint.new(0.5, Color3.fromRGB(200, 160, 255)),
-ColorSequenceKeypoint.new(1, C.purpleBorder),
+local bindBtn, bindLabel
+bindBtn, bindLabel = makeBtn("[ ⌨️ 點擊綁定快捷鍵 ]  G", C.bg3, 5, function(b, l)
+if IsBindingKey then return end
+IsBindingKey = true
+l.Text = "[ ⏳ 請按下鍵盤任意鍵設定... ]"
+tw(b, {BackgroundColor3 = Color3.fromRGB(130, 30, 30)}, 0.2)
+end)
+UserInputService.InputBegan:Connect(function(input, processed)
+if processed then return end
+if IsBindingKey and input.UserInputType == Enum.UserInputType.Keyboard then
+Config.StopKey = input.KeyCode
+IsBindingKey = false
+bindLabel.Text = "[ ⌨️ 點擊綁定快捷鍵 ]  " .. input.KeyCode.Name
+tw(bindBtn, {BackgroundColor3 = C.bg3}, 0.25)
+return
+end
+if input.KeyCode == Config.StopKey then
+Config.AutoAttack = not Config.AutoAttack
+autoAttackLabel.Text = "[ 自動普攻 ] " .. (Config.AutoAttack and "ON" or "OFF")
+local cor = Config.AutoAttack and C.greenD or C.bg3
+tw(autoAttackBtn, {BackgroundColor3 = cor}, 0.25)
+pcall(function()
+game:GetService("StarterGui"):SetCore("SendNotification", {
+Title = "快捷鍵已觸發🔄",
+Text = "自動普攻已變更為: " .. (Config.AutoAttack and "🟢開啟" or "🔴關閉"),
+Duration = 2
 })
-local baseRotationSpeed = 1.5
-task.spawn(function()
-while true do
-RunService.RenderStepped:Wait()
-local speed = IsLockingCamera and 3.5 or baseRotationSpeed
-logoGrad.Rotation = (logoGrad.Rotation + speed) % 360
-end
 end)
-makeBtn("[ 畫面強制鎖定 ] OFF", C.bg3, 3, function(b, l)
-Config.AimlockEnabled = not Config.AimlockEnabled
-l.Text = "[ 畫面強制鎖定 ] " .. (Config.AimlockEnabled and "ON" or "OFF")
-local cor = Config.AimlockEnabled and C.greenD or C.bg3
-tw(b, {BackgroundColor3 = cor}, 0.25)
-aimlockFloatBtn.Visible = Config.AimlockEnabled
-if not Config.AimlockEnabled then
-IsLockingCamera = false; AimlockTargetChar = nil; LostTargetTime = 0
-aimlockFloatBtn.Text = "未鎖定"
 end
-end)
-makeBtn("[ 鎖定對象 ] NPC", C.greenD2, 4, function(b, l)
-Config.TargetMode = (Config.TargetMode == "NPC") and "Player" or "NPC"
-l.Text = "[ 鎖定對象 ] " .. (Config.TargetMode == "NPC" and "NPC" or "玩家")
-AimlockTargetChar = nil; IsLockingCamera = false; LostTargetTime = 0; CurrentStickTarget = nil
-aimlockFloatBtn.Text = "未鎖定"
 end)
 local Credit = Instance.new("TextLabel", Frame)
 Credit.Size = UDim2.new(1, 0, 0, 24)
@@ -376,7 +381,7 @@ Credit.Position = UDim2.new(0, 0, 1, -26)
 Credit.BackgroundColor3 = C.bg2
 Credit.BackgroundTransparency = 0.5
 Credit.BorderSizePixel = 0
-Credit.Text = "格鬥腳本通用"
+Credit.Text = "自瞄格鬥腳本"
 Credit.Font = Enum.Font.SourceSansBold
 Credit.TextSize = 14
 Credit.TextColor3 = C.textD
@@ -403,6 +408,37 @@ end)
 end
 setupLocalDrag(TopBar, Frame)
 setupLocalDrag(Ball, Ball)
+aimlockFloatBtn = Instance.new("TextButton", ScreenGui)
+aimlockFloatBtn.Size = UDim2.new(0, 56, 0, 56)
+aimlockFloatBtn.Position = UDim2.new(0.85, 0, 0.5, -28)
+aimlockFloatBtn.BackgroundColor3 = Color3.fromRGB(28, 35, 45)
+aimlockFloatBtn.BackgroundTransparency = 0.1
+aimlockFloatBtn.BorderSizePixel = 0
+aimlockFloatBtn.Text = "未鎖定"
+aimlockFloatBtn.Font = Enum.Font.SourceSansBold
+aimlockFloatBtn.TextSize = 14
+aimlockFloatBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+aimlockFloatBtn.TextWrapped = true
+aimlockFloatBtn.Visible = false
+Instance.new("UICorner", aimlockFloatBtn).CornerRadius = UDim.new(1, 0)
+local aimlockFloatStroke = Instance.new("UIStroke", aimlockFloatBtn)
+aimlockFloatStroke.Thickness = 2.0
+aimlockFloatStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+local logoGrad = Instance.new("UIGradient", aimlockFloatStroke)
+logoGrad.Color = ColorSequence.new({
+ColorSequenceKeypoint.new(0, C.purpleBorder),
+ColorSequenceKeypoint.new(0.5, Color3.fromRGB(200, 160, 255)),
+ColorSequenceKeypoint.new(1, C.purpleBorder),
+})
+local baseRotationSpeed = 1.5
+task.spawn(function()
+while true do
+RunService.RenderStepped:Wait()
+local speed = IsLockingCamera and 3.5 or baseRotationSpeed
+logoGrad.Rotation = (logoGrad.Rotation + speed) % 360
+end
+end)
+setupLocalDrag(aimlockFloatBtn, aimlockFloatBtn)
 local dragMoved = false
 local draggingAim = false
 local aimDragStart, aimStartPos
@@ -429,62 +465,78 @@ if dragMoved or not Config.AimlockEnabled then return end
 if IsLockingCamera then
 IsLockingCamera = false
 AimlockTargetChar = nil
-LostTargetTime = 0
 aimlockFloatBtn.Text = "未鎖定"
 return
 end
 AimlockTargetChar = getFrontClosestTarget()
 if AimlockTargetChar then
 IsLockingCamera = true
-LostTargetTime = 0
 aimlockFloatBtn.Text = "鎖定"
 else
 aimlockFloatBtn.Text = "無目標"
 task.wait(0.3)
-aimlockFloatBtn.Text = "未鎖定"
+if not IsLockingCamera then aimlockFloatBtn.Text = "未鎖定" end
 end
 end)
 RunService.RenderStepped:Connect(function()
 local myChar = LocalPlayer.Character
 local myHrp = myChar and myChar:FindFirstChild("HumanoidRootPart")
 if not myHrp then return end
+if Config.AutoStick then
 local target = getStickTarget()
-if Config.AutoStick and target then
+if target then
 local tHrp = target:FindFirstChild("HumanoidRootPart") or target:FindFirstChild("Torso")
 if tHrp then
 for _, part in ipairs(myChar:GetDescendants()) do if part:IsA("BasePart") then part.CanCollide = false end end
-myHrp.CFrame = CFrame.lookAt(tHrp.Position - (tHrp.CFrame.LookVector * AttackDistance), tHrp.Position)
 myHrp.AssemblyLinearVelocity = Vector3.zero
 myHrp.AssemblyAngularVelocity = Vector3.zero
+local targetPos = tHrp.Position
+local lookVector = tHrp.CFrame.LookVector
+local behindPos = targetPos - (lookVector * AttackDistance)
+myHrp.CFrame = CFrame.lookAt(Vector3.new(behindPos.X, targetPos.Y, behindPos.Z), targetPos)
+end
 end
 end
 if Config.AimlockEnabled and IsLockingCamera and AimlockTargetChar and AimlockTargetChar.Parent then
-local aimPart = AimlockTargetChar:FindFirstChild("Head") or AimlockTargetChar:FindFirstChild("HumanoidRootPart")
+local isPlrValid = false
+pcall(function()
+local hum = AimlockTargetChar:FindFirstChildOfClass("Humanoid")
+local hrp = AimlockTargetChar:FindFirstChild("HumanoidRootPart") or AimlockTargetChar:FindFirstChild("Torso")
+if hum and hum.Health > 0 and hrp then
+isPlrValid = true
+end
+end)
+if isPlrValid then
+local aimPart = AimlockTargetChar:FindFirstChild(AimPart) or AimlockTargetChar:FindFirstChild("Head")
 if aimPart and workspace.CurrentCamera then
 workspace.CurrentCamera.CFrame = CFrame.lookAt(workspace.CurrentCamera.CFrame.Position, aimPart.Position)
+end
+else
+IsLockingCamera = false
+AimlockTargetChar = nil
+if aimlockFloatBtn then aimlockFloatBtn.Text = "未鎖定" end
+end
+else
+if IsLockingCamera and (not AimlockTargetChar or not AimlockTargetChar.Parent) then
+IsLockingCamera = false
+AimlockTargetChar = nil
+if aimlockFloatBtn then aimlockFloatBtn.Text = "未鎖定" end
 end
 end
 end)
 task.spawn(function()
 while true do
-task.wait(0.14)
-if Config.AutoAttack and getStickTarget() then
+task.wait(0.12)
+if Config.AutoAttack then
+local attackTarget = getStickTarget()
+if attackTarget then
 VirtualInputManager:SendMouseButtonEvent(0, 0, 0, true, game, 0)
 task.wait(0.01)
 VirtualInputManager:SendMouseButtonEvent(0, 0, 0, false, game, 0)
 end
 end
+end
 end)
-aimlockFloatBtn.Visible = false
 local minimized = false
 MinBtn.MouseButton1Click:Connect(function() minimized = not minimized; Frame.Visible = not minimized end)
 Ball.MouseButton1Click:Connect(function() minimized = not minimized; Frame.Visible = not minimized end)
-task.spawn(function()
-pcall(function()
-game:GetService("StarterGui"):SetCore("SendNotification", {
-Title = "腳本載入成功🟢",
-Text = "", -- 副標題
-Duration = 4
-})
-end)
-end)
