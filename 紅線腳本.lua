@@ -326,6 +326,30 @@ end
 end)
 return con
 end
+local function createSkillRow(rowNum, defaultKey, posY)
+local Label1 = Instance.new("TextLabel", Frame)
+Label1.Size = UDim2.new(0, 120, 0, 25)
+Label1.Position = UDim2.new(0, 12, 0, posY)
+Label1.BackgroundTransparency = 1
+Label1.Text = "連點技能 " .. rowNum .. " 按鍵:"
+Label1.Font = Enum.Font.SourceSans
+Label1.TextSize = 14
+Label1.TextColor3 = Color3.fromRGB(180, 180, 180)
+Label1.TextXAlignment = Enum.TextXAlignment.Left
+local KeyBox = Instance.new("TextBox", Frame)
+KeyBox.Size = UDim2.new(0, 60, 0, 25)
+KeyBox.Position = UDim2.new(1, -72, 0, posY)
+KeyBox.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+KeyBox.BorderSizePixel = 0
+KeyBox.Text = defaultKey
+KeyBox.Font = Enum.Font.Code
+KeyBox.TextSize = 14
+KeyBox.TextColor3 = Color3.fromRGB(0, 200, 255)
+KeyBox.ClearTextOnFocus = true
+Instance.new("UICorner", KeyBox).CornerRadius = UDim.new(0, 6)
+Instance.new("UIStroke", KeyBox).Color = Color3.fromRGB(60, 60, 60)
+return KeyBox
+end
 makeBtn("[ 自動瞄準 ] OFF", C.red, 1, function(b, l)
 AimbotEnabled = not AimbotEnabled
 l.Text = "[ 自動瞄準 ] " .. (AimbotEnabled and "ON" or "OFF")
@@ -516,17 +540,6 @@ else
 return char:FindFirstChild("HumanoidRootPart") or char:FindFirstChild("Head")
 end
 end
--- 【防穿牆過濾：射線檢測】
-local function visible(pos, targetChar)
-local origin = Camera.CFrame.Position
-local dir = (pos - origin).Unit * (pos - origin).Magnitude
-local params = RaycastParams.new()
-params.FilterDescendantsInstances = {LocalPlayer.Character, targetChar}
-params.FilterType = Enum.RaycastFilterType.Blacklist
-local result = workspace:Raycast(origin, dir, params)
-if not result then return true end
-return (result.Position - pos).Magnitude < 3
-end
 RunService.RenderStepped:Connect(function()
 if AimbotEnabled and FovRadius > 0 then
 local size = FovRadius * 2
@@ -546,8 +559,8 @@ if espPart and hum and hum.Health > 0 and not isTeammate(plr) then
 local pos, onScreen = Camera:WorldToViewportPoint(espPart.Position)
 local screenVec = Vector2.new(pos.X, pos.Y)
 local distFromCenter = (screenVec - screenCenter).Magnitude
--- 【修改：只有在螢幕前方、自瞄FOv範圍內、且沒有牆壁阻擋（可見）時才繪製ESP】
-if onScreen and distFromCenter <= FovRadius and visible(espPart.Position, char) then
+-- 【徹底移除 visible 防穿牆檢查，實現完美無死角全透視】
+if onScreen and distFromCenter <= FovRadius then
 local currentBoxSizeX, currentBoxSizeY = 10, 10
 local currentBoxPosX, currentBoxPosY = pos.X - 5, pos.Y - 5
 if AimPart == "HumanoidRootPart" then
@@ -587,6 +600,7 @@ local function isAlive(char)
 local hum = char and char:FindFirstChildOfClass("Humanoid")
 return hum and hum.Health > 0
 end
+-- 【自瞄也同步移除牆壁檢查，支援盲鎖與穿牆鎖】
 local function getBestTarget()
 local best, bestDot = nil, -1
 local screenCenter = Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2)
@@ -595,7 +609,7 @@ if plr ~= LocalPlayer and plr.Character and not isTeammate(plr) then
 local part = plr.Character:FindFirstChild(AimPart) or plr.Character:FindFirstChild("Head")
 if part and isAlive(plr.Character) then
 local dist = (part.Position - Camera.CFrame.Position).Magnitude
-if dist <= MaxDistance and visible(part.Position, plr.Character) then
+if dist <= MaxDistance then
 local screenPos, onScreen = Camera:WorldToViewportPoint(part.Position)
 if onScreen then
 local screenVec = Vector2.new(screenPos.X, screenPos.Y)
@@ -625,7 +639,6 @@ Camera.CFrame = CFrame.new(Camera.CFrame.Position, target.Position)
 end
 end
 end)
--- 【右下角純淨單次通知】
 task.spawn(function()
 pcall(function()
 game:GetService("StarterGui"):SetCore("SendNotification", {
@@ -634,4 +647,4 @@ Text = "",
 Duration = 4
 })
 end)
-end)
+end)                
