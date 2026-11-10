@@ -15,6 +15,7 @@ local Config = {
     TargetMode = "NPC",
     AimlockEnabled = false,
     StopKey = Enum.KeyCode.G, 
+    WalkSpeed = 0, -- 新增：預設 0 為基礎速度
 }
 
 local MaxDistance = 1500      
@@ -187,7 +188,7 @@ end
 
 local isMobile = UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled 
 local dw = isMobile and 260 or 230 
-local dh = isMobile and 315 or 285 
+local dh = isMobile and 365 or 335 -- 加大高度以容納拉桿
 
 local ScreenGui = Instance.new("ScreenGui") 
 ScreenGui.Name = "SolaraInternalGUI" 
@@ -266,7 +267,7 @@ Instance.new("UICorner", Ball).CornerRadius = UDim.new(1, 0)
 local BallStroke = Instance.new("UIStroke", Ball) 
 BallStroke.Thickness = 1.5 
 BallStroke.Color = C.green 
-BallStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border 
+BallStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
 local BallLabel = Instance.new("TextLabel", Ball)
 BallLabel.Size = UDim2.new(1, 0, 1, 0)
 BallLabel.BackgroundTransparency = 1
@@ -351,6 +352,81 @@ if IsBindingKey then return end
 IsBindingKey = true
 l.Text = "[ ⏳ 請按下鍵盤任意鍵設定... ]"
 tw(b, {BackgroundColor3 = Color3.fromRGB(130, 30, 30)}, 0.2)
+end)
+-- --- 新增：移速拉桿 UI 區塊 ---
+local SliderFrame = Instance.new("Frame")
+SliderFrame.Size = UDim2.new(1, -4, 0, 42)
+SliderFrame.BackgroundColor3 = C.bg3
+SliderFrame.BackgroundTransparency = 0.15
+SliderFrame.BorderSizePixel = 0
+SliderFrame.LayoutOrder = 6
+SliderFrame.Parent = Content
+Instance.new("UICorner", SliderFrame).CornerRadius = UDim.new(0, 10)
+local SliderStroke = Instance.new("UIStroke", SliderFrame)
+SliderStroke.Thickness = 1
+SliderStroke.Color = C.green
+SliderStroke.Transparency = 0.5
+SliderStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+local SliderLabel = Instance.new("TextLabel", SliderFrame)
+SliderLabel.Size = UDim2.new(1, 0, 0, 18)
+SliderLabel.Position = UDim2.new(0, 0, 0, 2)
+SliderLabel.BackgroundTransparency = 1
+SliderLabel.Text = "⚡ 玩家速度調整: 基礎速度"
+SliderLabel.Font = Enum.Font.SourceSansBold
+SliderLabel.TextSize = 13
+SliderLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+local SliderContainer = Instance.new("Frame", SliderFrame)
+SliderContainer.Size = UDim2.new(1, -24, 0, 6)
+SliderContainer.Position = UDim2.new(0, 12, 0, 26)
+SliderContainer.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+SliderContainer.BorderSizePixel = 0
+Instance.new("UICorner", SliderContainer).CornerRadius = UDim.new(1, 0)
+local SliderFill = Instance.new("Frame", SliderContainer)
+SliderFill.Size = UDim2.new(0, 0, 1, 0)
+SliderFill.BackgroundColor3 = C.green
+SliderFill.BorderSizePixel = 0
+Instance.new("UICorner", SliderFill).CornerRadius = UDim.new(1, 0)
+local SliderButton = Instance.new("TextButton", SliderContainer)
+SliderButton.Size = UDim2.new(0, 12, 0, 12)
+SliderButton.Position = UDim2.new(0, -6, 0.5, -6)
+SliderButton.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+SliderButton.BorderSizePixel = 0
+SliderButton.Text = ""
+Instance.new("UICorner", SliderButton).CornerRadius = UDim.new(1, 0)
+local function updateSlider(input)
+local containerScaleX = math.clamp((input.Position.X - SliderContainer.AbsolutePosition.X) / SliderContainer.AbsoluteSize.X, 0, 1)
+SliderButton.Position = UDim2.new(containerScaleX, -6, 0.5, -6)
+SliderFill.Size = UDim2.new(containerScaleX, 0, 1, 0)
+local value = math.round(containerScaleX * 200)
+Config.WalkSpeed = value
+if value == 0 then
+SliderLabel.Text = "⚡ 玩家速度調整: 基礎速度"
+else
+SliderLabel.Text = "⚡ 玩家速度調整: " .. tostring(value)
+end
+end
+local sliding = false
+SliderButton.InputBegan:Connect(function(input)
+if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+sliding = true
+end
+end)
+UserInputService.InputChanged:Connect(function(input)
+if sliding and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+updateSlider(input)
+end
+end)
+UserInputService.InputEnded:Connect(function(input)
+if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+sliding = false
+end
+end)
+-- 開放點擊軌道直接跳轉數值
+SliderContainer.InputBegan:Connect(function(input)
+if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+sliding = true
+updateSlider(input)
+end
 end)
 UserInputService.InputBegan:Connect(function(input, processed)
 if processed then return end
@@ -481,7 +557,14 @@ end)
 RunService.RenderStepped:Connect(function()
 local myChar = LocalPlayer.Character
 local myHrp = myChar and myChar:FindFirstChild("HumanoidRootPart")
+local myHum = myChar and myChar:FindFirstChildOfClass("Humanoid")
 if not myHrp then return end
+-- 新增：即時強制控制角色移速循環
+if myHum then
+if Config.WalkSpeed > 0 then
+myHum.WalkSpeed = Config.WalkSpeed
+end
+end
 if Config.AutoStick then
 local target = getStickTarget()
 if target then
